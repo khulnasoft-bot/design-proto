@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { motion } from "motion/react";
 import { ResearchNode, Priority } from "@/src/types";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Search, Lightbulb, FileText, Brain, Flag } from "lucide-react";
+import { ExternalLink, Search, Lightbulb, FileText, Brain, Flag, Copy, Trash2, Edit2, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const icons = {
   query: Search,
@@ -21,13 +23,31 @@ const priorityColors = {
 
 export function ResearchNodeCard({ 
   node, 
-  onUpdatePriority 
+  onUpdatePriority,
+  onDelete,
+  onEdit
 }: { 
   node: ResearchNode;
   onUpdatePriority?: (priority: Priority) => void;
+  onDelete?: () => void;
+  onEdit?: (content: string) => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(node.content);
   const Icon = icons[node.type];
-  
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(node.content);
+    toast.success("Content copied to clipboard");
+  };
+
+  const handleSave = () => {
+    if (editContent.trim() && editContent !== node.content) {
+      onEdit?.(editContent);
+    }
+    setIsEditing(false);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -52,6 +72,34 @@ export function ResearchNodeCard({
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 rounded-full text-zinc-600 hover:text-zinc-400"
+                onClick={handleCopy}
+                title="Copy"
+              >
+                <Copy className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 rounded-full text-zinc-600 hover:text-zinc-400"
+                onClick={() => setIsEditing(true)}
+                title="Edit"
+              >
+                <Edit2 className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 rounded-full text-zinc-600 hover:text-red-400"
+                onClick={() => confirm("Delete this node?") && onDelete?.()}
+                title="Delete"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+              <div className="w-px h-3 bg-zinc-800 mx-1" />
               {(['low', 'medium', 'high'] as Priority[]).map((p) => (
                 <Button
                   key={p}
@@ -62,6 +110,7 @@ export function ResearchNodeCard({
                     node.priority === p ? priorityColors[p] : "text-zinc-600 hover:text-zinc-400"
                   )}
                   onClick={() => onUpdatePriority?.(p)}
+                  title={`Set ${p} priority`}
                 >
                   <Flag className="h-3 w-3" />
                 </Button>
@@ -73,9 +122,40 @@ export function ResearchNodeCard({
           </div>
         </CardHeader>
         <CardContent>
-          <div className="prose prose-invert max-w-none text-zinc-300 leading-relaxed whitespace-pre-wrap">
-            {node.content}
-          </div>
+          {isEditing ? (
+            <div className="space-y-3">
+              <textarea
+                autoFocus
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full min-h-[100px] bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-sm text-zinc-200 focus:outline-none focus:border-blue-500/50 resize-none"
+              />
+              <div className="flex justify-end gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditContent(node.content);
+                  }}
+                  className="h-8 text-xs text-zinc-500"
+                >
+                  <X className="mr-1 h-3 w-3" /> Cancel
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={handleSave}
+                  className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white"
+                >
+                  <Check className="mr-1 h-3 w-3" /> Save Changes
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="prose prose-invert max-w-none text-zinc-300 leading-relaxed whitespace-pre-wrap">
+              {node.content}
+            </div>
+          )}
           {node.sources && node.sources.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2">
               {node.sources.map((source) => (

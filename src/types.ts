@@ -14,15 +14,25 @@ export interface ResearchNode {
   type: NodeType;
   content: string;
   timestamp: number;
+  updatedAt?: number;
   priority?: Priority;
   sources?: Source[];
+  position?: { x: number; y: number };
+}
+
+export interface Connection {
+  id: string;
+  fromId: string;
+  toId: string;
 }
 
 export interface Project {
   id: string;
   name: string;
+  description?: string;
   createdAt: number;
   nodes: ResearchNode[];
+  connections?: Connection[];
 }
 
 export interface WorkspaceState {
