@@ -1,0 +1,95 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: projects
+// Document ID: auto-generated or custom
+// Fields:
+//   - name: string (required, 1-100 chars)
+//   - description: string (optional, < 1000 chars)
+//   - createdAt: number (required)
+//   - userId: string (required) - UID of the owner
+//   - nodes: list of maps (ResearchNode schema)
+//   - connections: list of maps (Connection schema)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+         (request.auth.token.email == "dr.lizadmf@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function validString(field, min, max) {
+      return request.resource.data[field] is string && 
+             request.resource.data[field].size() >= min && 
+             request.resource.data[field].size() <= max;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidProject(data) {
+      return hasRequiredFields(['name', 'createdAt', 'userId']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.userId == request.auth.uid &&
+             data.createdAt is number &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
+             (!('nodes' in data) || data.nodes is list) &&
+             (!('connections' in data) || data.connections is list);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /projects/{projectId} {
+      allow read: if isDocOwner() || isAdmin();
+      
+      allow create: if isAuthenticated() && 
+                      isValidProject(request.resource.data) && 
+                      request.resource.data.userId == request.auth.uid;
+                      
+      allow update: if isDocOwner() && 
+                      isValidProject(request.resource.data) && 
+                      request.resource.data.userId == resource.data.userId &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+                      
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

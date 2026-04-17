@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A research workspace project containing nodes and connections.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the project." },
+        "description": { "type": "string", "description": "An optional description of the project." },
+        "createdAt": { "type": "number", "description": "Timestamp when the project was created." },
+        "userId": { "type": "string", "description": "The UID of the user who owns the project." },
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "ResearchNode" },
+          "description": "List of research nodes in the project."
+        },
+        "connections": {
+          "type": "array",
+          "items": { "$ref": "Connection" },
+          "description": "List of visual connections between nodes."
+        }
+      },
+      "required": ["name", "createdAt", "userId"]
+    },
+    "ResearchNode": {
+      "title": "ResearchNode",
+      "description": "A single piece of research data (query, fact, synthesis, or thought).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["query", "fact", "synthesis", "thought"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "url": { "type": "string" },
+              "snippet": { "type": "string" }
+            }
+          }
+        },
+        "position": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" }
+          }
+        }
+      }
+    },
+    "Connection": {
+      "title": "Connection",
+      "description": "A visual link between two research nodes.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromId": { "type": "string" },
+        "toId": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Storage for research projects."
+    }
+  }
+}

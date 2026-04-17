@@ -1,21 +1,44 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { BusinessMemory, SitePage } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-export async function generateResearchResponse(prompt: string, history: any[] = []) {
-  const model = "gemini-3.1-pro-preview";
+export async function generateResearchResponse(
+  prompt: string, 
+  history: any[] = [], 
+  businessMemory?: BusinessMemory,
+  useThinking: boolean = false
+) {
+  const model = useThinking ? "gemini-3.1-pro-preview" : "gemini-3-flash-preview";
   
+  const systemInstruction = `You are a world-class business research and strategy assistant.
+${businessMemory ? `\nBUSINESS CONTEXT:
+Name: ${businessMemory.businessName}
+Industry: ${businessMemory.industry}
+Key Offerings: ${businessMemory.keyOfferings.join(', ')}
+Brand Voice: ${businessMemory.brandVoice}
+` : ""}
+Provide deep, synthesized insights. If requested to generate site content, use the business memory to ensure consistency.
+Focus on accuracy, depth, and strategic value.`;
+
   try {
+    const config: any = {
+      systemInstruction,
+    };
+
+    if (useThinking && model === "gemini-3.1-pro-preview") {
+      config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+    } else {
+      config.tools = [{ googleSearch: {} }];
+    }
+
     const response = await ai.models.generateContent({
       model,
       contents: [
         ...history,
         { role: 'user', parts: [{ text: prompt }] }
       ],
-      config: {
-        tools: [{ googleSearch: {} }],
-        systemInstruction: "You are a world-class research assistant. Provide deep, synthesized insights with clear source citations. Focus on accuracy and depth.",
-      },
+      config,
     });
 
     return {
@@ -28,6 +51,43 @@ export async function generateResearchResponse(prompt: string, history: any[] = 
     };
   } catch (error) {
     console.error("Gemini API Error:", error);
+    throw error;
+  }
+}
+
+export async function generateSiteContent(
+  pageType: SitePage['type'],
+  businessMemory: BusinessMemory,
+  additionalNotes: string = ""
+) {
+  const model = "gemini-3.1-pro-preview";
+  
+  const prompt = `Generate high-fidelity content for a ${pageType} page for the business: ${businessMemory.businessName}.
+  
+Context:
+- Industry: ${businessMemory.industry}
+- Target Audience: ${businessMemory.targetAudience}
+- Brand Voice: ${businessMemory.brandVoice}
+- Core Values: ${businessMemory.coreValues.join(', ')}
+- Offerings: ${businessMemory.keyOfferings.join(', ')}
+
+Additional Instructions: ${additionalNotes}
+
+The output should be structured as clean Markdown with sections for Headers, Body Content, and Call-to-Actions.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        systemInstruction: "You are an expert web designer and copywriter. Generate professional, conversion-focused page content.",
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
+      }
+    });
+
+    return response.text || "Failed to generate page content.";
+  } catch (error) {
+    console.error("Site Generation Error:", error);
     throw error;
   }
 }

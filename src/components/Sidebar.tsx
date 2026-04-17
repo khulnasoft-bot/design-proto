@@ -179,7 +179,7 @@ export function Sidebar({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm("Delete this project?")) onDeleteProject(project.id);
+                          onDeleteProject(project.id);
                         }}
                         className="p-1 rounded-md hover:bg-zinc-700 text-zinc-400 hover:text-red-400 transition-all"
                         title="Delete"
