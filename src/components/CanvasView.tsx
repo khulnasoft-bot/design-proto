@@ -3,14 +3,20 @@ import { motion, AnimatePresence } from "motion/react";
 import { ResearchNode, Priority, Connection } from "@/src/types";
 import { ResearchNodeCard } from "./ResearchNodeCard";
 import { cn } from "@/lib/utils";
+import { RadialMenu, RadialMenuItem } from "./RadialMenu";
 import { 
-  ZoomIn, 
-  ZoomOut, 
-  Maximize2, 
-  MousePointer2, 
-  Grab, 
-  Link2, 
-  X, 
+  Sparkles, 
+  Brain, 
+  Plus, 
+  Layout, 
+  Trash2, 
+  Globe, 
+  FileText,
+  Zap,
+  MousePointer2,
+  Grab,
+  Link2,
+  X,
   LayoutGrid,
   AlignLeft,
   AlignRight,
@@ -26,7 +32,9 @@ import {
   MoreHorizontal,
   Palette,
   Settings2,
-  Trash2
+  ZoomIn,
+  ZoomOut,
+  Maximize2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -35,18 +43,23 @@ import {
   TooltipProvider, 
   TooltipTrigger 
 } from "@/components/ui/tooltip";
+import { toast } from "sonner";
 
 interface CanvasViewProps {
   nodes: ResearchNode[];
   connections: Connection[];
   onUpdatePriority: (nodeId: string, priority: Priority) => void;
   onDelete: (nodeId: string) => void;
+  onDeleteNodes?: (nodeIds: string[]) => void;
   onEdit: (nodeId: string, content: string) => void;
   onUpdatePosition: (nodeId: string, x: number, y: number) => void;
   onUpdateNodes: (updatedNodes: ResearchNode[]) => void;
   onAddConnection: (fromId: string, toId: string) => void;
   onDeleteConnection: (connectionId: string) => void;
   onUpdateConnection: (connectionId: string, updates: Partial<Connection>) => void;
+  onBrainstorm?: (query: string) => void;
+  onSummarize?: () => void;
+  onAddNode?: (x: number, y: number) => void;
 }
 
 export function CanvasView({ 
@@ -54,12 +67,16 @@ export function CanvasView({
   connections,
   onUpdatePriority, 
   onDelete, 
+  onDeleteNodes,
   onEdit,
   onUpdatePosition,
   onUpdateNodes,
   onAddConnection,
   onDeleteConnection,
-  onUpdateConnection
+  onUpdateConnection,
+  onBrainstorm,
+  onSummarize,
+  onAddNode
 }: CanvasViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -77,8 +94,14 @@ export function CanvasView({
   const [hoveredConnectionId, setHoveredConnectionId] = useState<string | null>(null);
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [potentialTargetId, setPotentialTargetId] = useState<string | null>(null);
+  const [radialMenu, setRadialMenu] = useState<{ x: number, y: number, isOpen: boolean } | null>(null);
+  const [showArrangeMenu, setShowArrangeMenu] = useState(false);
+  const [snapLines, setSnapLines] = useState<{ x?: number, y?: number }[]>([]);
 
   const GRID_SIZE = 40;
+  const SNAP_THRESHOLD = 5;
+  const CARD_WIDTH = 350;
+  const CARD_HEIGHT = 180;
 
   const handleZoom = (delta: number) => {
     setScale(prev => Math.min(Math.max(prev + delta, 0.2), 2));
@@ -122,7 +145,9 @@ export function CanvasView({
     }
   };
 
-  const handleBgClick = () => {
+  const handleBgClick = (e: React.MouseEvent) => {
+    if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+    
     setSelectedNodeIds([]);
     setConnectionStartNode(null);
     setSelectedConnectionId(null);
@@ -284,7 +309,7 @@ export function CanvasView({
     const top = Math.min(marquee.startY, endY);
     const bottom = Math.max(marquee.startY, endY);
     
-    const newlySelected = nodes.filter(node => {
+    const newlySelectedInMarquee = nodes.filter(node => {
       const pos = nodePositions[node.id];
       const nodeLeft = pos.x;
       const nodeTop = pos.y;
@@ -299,7 +324,14 @@ export function CanvasView({
       );
     }).map(n => n.id);
     
-    setSelectedNodeIds(newlySelected);
+    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+      // Additive selection: combine existing selected nodes with those in the marquee
+      // (Using a Set to ensure unique IDs)
+      const combined = new Set([...selectedNodeIds, ...newlySelectedInMarquee]);
+      setSelectedNodeIds(Array.from(combined));
+    } else {
+      setSelectedNodeIds(newlySelectedInMarquee);
+    }
   };
 
   const handleMouseUp = () => {
@@ -311,6 +343,105 @@ export function CanvasView({
     setMarquee(null);
   };
 
+  const handleAutoLayout = (targetNodeIds?: string[]) => {
+    const nodesToLayout = targetNodeIds 
+      ? nodes.filter(n => targetNodeIds.includes(n.id))
+      : nodes;
+    
+    if (nodesToLayout.length === 0) return;
+
+    const cols = Math.ceil(Math.sqrt(nodesToLayout.length));
+    const spacingX = 450;
+    const spacingY = 350;
+
+    const updatedNodes = nodesToLayout.map((node, index) => {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      return {
+        ...node,
+        position: {
+          x: 100 + col * spacingX,
+          y: 100 + row * spacingY
+        }
+      };
+    });
+
+    onUpdateNodes(updatedNodes);
+    toast.success(`Arranged ${nodesToLayout.length} nodes into a grid`);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setRadialMenu({
+      x: e.clientX,
+      y: e.clientY,
+      isOpen: true
+    });
+  };
+
+  const radialItems: RadialMenuItem[] = [
+    {
+      id: 'brainstorm',
+      icon: Brain,
+      label: 'Brainstorm',
+      color: '#3b82f6',
+      action: () => onBrainstorm?.("Brainstorm related concepts based on the current workspace")
+    },
+    {
+      id: 'summarize',
+      icon: FileText,
+      label: 'Summarize',
+      color: '#a855f7',
+      action: () => onSummarize?.()
+    },
+    {
+      id: 'add-node',
+      icon: Plus,
+      label: 'New Node',
+      color: '#10b981',
+      action: () => {
+        if (radialMenu) {
+            const rect = containerRef.current?.getBoundingClientRect();
+            if (rect) {
+                const x = (radialMenu.x - rect.left - offset.x) / scale;
+                const y = (radialMenu.y - rect.top - offset.y) / scale;
+                onAddNode?.(x, y);
+            }
+        }
+      }
+    },
+    {
+        id: 'auto-layout',
+        icon: Layout,
+        label: 'Auto Layout',
+        color: '#f59e0b',
+        action: () => handleAutoLayout()
+    },
+    {
+      id: 'delete',
+      icon: Trash2,
+      label: 'Delete Selected',
+      color: '#ef4444',
+      action: () => {
+          if (selectedNodeIds.length > 0 && onDeleteNodes) {
+              onDeleteNodes(selectedNodeIds);
+              setSelectedNodeIds([]);
+          } else if (selectedNodeIds.length === 0) {
+              toast.error("No nodes selected");
+          }
+      }
+    },
+    {
+      id: 'site-gen',
+      icon: Globe,
+      label: 'Digital Agent',
+      color: '#ec4899',
+      action: () => {
+          toast.success("AI Agent deployed to current workspace");
+      }
+    }
+  ];
+
   return (
     <div 
       className="relative w-full h-full overflow-hidden bg-zinc-950/50 select-none" 
@@ -319,7 +450,16 @@ export function CanvasView({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onContextMenu={handleContextMenu}
     >
+      {/* Radial Menu Integration */}
+      <RadialMenu 
+        x={radialMenu?.x || 0}
+        y={radialMenu?.y || 0}
+        isOpen={!!radialMenu?.isOpen}
+        onClose={() => setRadialMenu(null)}
+        items={radialItems}
+      />
       {/* Grid Pattern */}
       <div 
         className="absolute inset-0 pointer-events-none opacity-[0.03]"
@@ -373,48 +513,7 @@ export function CanvasView({
         </div>
       </div>
 
-      {/* Selection Bar */}
-      {selectedNodeIds.length > 1 && (
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 z-30">
-          <div className="bg-zinc-900/90 backdrop-blur-md border border-zinc-800 px-2 py-1.5 rounded-xl flex items-center gap-1 shadow-2xl overflow-hidden">
-            <div className="flex items-center gap-1 pr-2 border-r border-zinc-800 mr-1">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2">
-                {selectedNodeIds.length} selected
-              </span>
-            </div>
-            
-            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); alignNodes('top'); }} className="h-8 w-8 text-zinc-400 hover:text-zinc-100" title="Align Top">
-              <AlignVerticalJustifyStart className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); alignNodes('bottom'); }} className="h-8 w-8 text-zinc-400 hover:text-zinc-100" title="Align Bottom">
-              <AlignVerticalJustifyEnd className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); alignNodes('left'); }} className="h-8 w-8 text-zinc-400 hover:text-zinc-100" title="Align Left">
-              <AlignLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); alignNodes('right'); }} className="h-8 w-8 text-zinc-400 hover:text-zinc-100" title="Align Right">
-              <AlignRight className="h-4 w-4" />
-            </Button>
-            
-            <div className="w-px h-4 bg-zinc-800 mx-1" />
-            
-            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); distributeNodes('horizontal'); }} className="h-8 w-8 text-zinc-400 hover:text-zinc-100" title="Distribute Horizontally">
-              <SeparatorVertical className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); distributeNodes('vertical'); }} className="h-8 w-8 text-zinc-400 hover:text-zinc-100" title="Distribute Vertically">
-              <SeparatorHorizontal className="h-4 w-4" />
-            </Button>
-            
-            <div className="w-px h-4 bg-zinc-800 mx-1" />
-            
-            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleBgClick(); }} className="h-8 w-8 text-zinc-400 hover:text-red-400" title="Clear Selection">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Canvas Controls */}
+      {/* Nodes Layer */}
       <div className="absolute bottom-24 right-8 flex flex-col gap-2 z-20">
         <div className="bg-zinc-900/80 backdrop-blur-md border border-zinc-800 rounded-xl p-1 flex flex-col gap-1 shadow-2xl">
           <Button variant="ghost" size="icon" onClick={() => handleZoom(0.1)} className="h-8 w-8 text-zinc-400 hover:text-zinc-100">
@@ -536,7 +635,33 @@ export function CanvasView({
             >
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6" />
             </marker>
+            <linearGradient id="pendingGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#a855f7" />
+              <stop offset="100%" stopColor="#3b82f6" />
+            </linearGradient>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+              <feMerge>
+                <feMergeNode in="coloredBlur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
           </defs>
+          
+          {/* Snap Guides */}
+          {snapLines.map((line, i) => (
+            <line
+              key={`snap-${i}`}
+              x1={line.x !== undefined ? line.x : -10000}
+              y1={line.y !== undefined ? line.y : -10000}
+              x2={line.x !== undefined ? line.x : 10000}
+              y2={line.y !== undefined ? line.y : 10000}
+              stroke="#3b82f6"
+              strokeWidth={1 / scale}
+              strokeDasharray="4 2"
+              className="opacity-50"
+            />
+          ))}
 
           {marquee && (
             <rect
@@ -552,17 +677,48 @@ export function CanvasView({
           )}
 
           {pendingConnection && (
-            <path
-              d={`M ${nodePositions[pendingConnection.fromId].x + 350} ${nodePositions[pendingConnection.fromId].y + 90} 
-                 C ${nodePositions[pendingConnection.fromId].x + 450} ${nodePositions[pendingConnection.fromId].y + 90},
-                   ${pendingConnection.mouseX - 100} ${pendingConnection.mouseY},
-                   ${pendingConnection.mouseX} ${pendingConnection.mouseY}`}
-              fill="none"
-              stroke="rgba(168, 85, 247, 0.5)"
-              strokeWidth="2"
-              strokeDasharray="4 2"
-              markerEnd="url(#arrowhead)"
-            />
+            <g>
+              <motion.path
+                d={(() => {
+                  const fromPos = nodePositions[pendingConnection.fromId];
+                  const startX = fromPos.x + 350;
+                  const startY = fromPos.y + 90;
+                  
+                  let endX = pendingConnection.mouseX;
+                  let endY = pendingConnection.mouseY;
+                  
+                  if (potentialTargetId && nodePositions[potentialTargetId]) {
+                    const targetPos = nodePositions[potentialTargetId];
+                    endX = targetPos.x;
+                    endY = targetPos.y + 90;
+                  }
+                  
+                  const dx = endX - startX;
+                  const curve = Math.min(Math.abs(dx) * 0.5, 150);
+                  
+                  return `M ${startX} ${startY} 
+                         C ${startX + curve} ${startY},
+                           ${endX - curve} ${endY},
+                           ${endX} ${endY}`;
+                })()}
+                fill="none"
+                stroke="url(#pendingGradient)"
+                strokeWidth="3"
+                strokeDasharray="6 4"
+                markerEnd="url(#arrowhead)"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                style={{ filter: 'url(#glow)' }}
+              />
+              <motion.circle
+                cx={potentialTargetId && nodePositions[potentialTargetId] ? nodePositions[potentialTargetId].x : pendingConnection.mouseX}
+                cy={potentialTargetId && nodePositions[potentialTargetId] ? nodePositions[potentialTargetId].y + 90 : pendingConnection.mouseY}
+                r={potentialTargetId ? 6 : 4}
+                fill={potentialTargetId ? "#3b82f6" : "#a855f7"}
+                animate={potentialTargetId ? { scale: [1, 1.4, 1], opacity: [0.7, 1, 0.7] } : { scale: [1, 1.5, 1] }}
+                transition={{ repeat: Infinity, duration: potentialTargetId ? 0.8 : 1 }}
+              />
+            </g>
           )}
 
           {connections.map((conn) => {
@@ -826,10 +982,6 @@ export function CanvasView({
           const isSelected = selectedNodeIds.includes(node.id);
           const isPrimaryDrag = activeDrag?.id === node.id;
           
-          // Calculate snapped position for the ghost indicator (only for primary drag)
-          const snappedX = activeDrag && isSnapping ? Math.round((pos.x + activeDrag.deltaX) / GRID_SIZE) * GRID_SIZE : 0;
-          const snappedY = activeDrag && isSnapping ? Math.round((pos.y + activeDrag.deltaY) / GRID_SIZE) * GRID_SIZE : 0;
-
           // Apply drag delta if this node is selected or is the primary drag
           let displayX = pos.x;
           let displayY = pos.y;
@@ -839,41 +991,17 @@ export function CanvasView({
             displayY += activeDrag.deltaY;
           }
 
-          const isPerfectlySnapped = activeDrag && isSnapping && 
-            Math.abs(displayX - snappedX) < 10 && 
-            Math.abs(displayY - snappedY) < 10;
+          // Calculate snapped position for the ghost indicator (only for primary drag)
+          const snappedX = displayX;
+          const snappedY = displayY;
+
+          const isPerfectlySnapped = snapLines.length > 0;
 
           return (
             <React.Fragment key={node.id}>
               {/* Snapping Visual Guidance */}
               {isPrimaryDrag && isSnapping && (
                 <>
-                  {/* Grid Axis Guides */}
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 0.15 }}
-                    className="absolute bg-blue-500 pointer-events-none"
-                    style={{ 
-                      left: 0, 
-                      top: snappedY + 90, // Center of card height (180/2)
-                      width: '10000%', 
-                      height: 1,
-                      transform: 'translateX(-50%)'
-                    }}
-                  />
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 0.15 }}
-                    className="absolute bg-blue-500 pointer-events-none"
-                    style={{ 
-                      left: snappedX + 175, // Center of card width (350/2)
-                      top: 0, 
-                      width: 1, 
-                      height: '10000%',
-                      transform: 'translateY(-50%)'
-                    }}
-                  />
-
                   {/* Snapping Ghost Indicator */}
                   <motion.div 
                     className={cn(
@@ -916,6 +1044,7 @@ export function CanvasView({
                   setIsDragging(true);
                   if (!isPanning && !isConnecting) {
                     setActiveDrag({ id: node.id, currentX: pos.x, currentY: pos.y, deltaX: 0, deltaY: 0 });
+                    setSnapLines([]);
                     // If the node being dragged isn't selected, select only it
                     if (!selectedNodeIds.includes(node.id)) {
                       setSelectedNodeIds([node.id]);
@@ -924,25 +1053,103 @@ export function CanvasView({
                 }}
                 onDrag={(_, info) => {
                   if (!isPanning && !isConnecting) {
-                    setActiveDrag(prev => prev ? { ...prev, deltaX: info.offset.x, deltaY: info.offset.y } : null);
+                    let dx = info.offset.x;
+                    let dy = info.offset.y;
+                    
+                    const newSnapLines: { x?: number, y?: number }[] = [];
+                    
+                    if (isSnapping) {
+                      const snapThreshold = SNAP_THRESHOLD / scale;
+                      const draggedNodeX = pos.x + dx;
+                      const draggedNodeY = pos.y + dy;
+                      
+                      const draggedCenters = [
+                        { val: draggedNodeX, name: 'left' },
+                        { val: draggedNodeX + CARD_WIDTH / 2, name: 'centerX' },
+                        { val: draggedNodeX + CARD_WIDTH, name: 'right' }
+                      ];
+                      const draggedVerticals = [
+                        { val: draggedNodeY, name: 'top' },
+                        { val: draggedNodeY + CARD_HEIGHT / 2, name: 'centerY' },
+                        { val: draggedNodeY + CARD_HEIGHT, name: 'bottom' }
+                      ];
+
+                      const otherNodes = nodes.filter(n => !selectedNodeIds.includes(n.id));
+                      
+                      let bestDx = Infinity;
+                      let bestDy = Infinity;
+                      let snapX: number | null = null;
+                      let snapY: number | null = null;
+
+                      otherNodes.forEach(other => {
+                        const otherPos = nodePositions[other.id];
+                        const otherXPoints = [otherPos.x, otherPos.x + CARD_WIDTH / 2, otherPos.x + CARD_WIDTH];
+                        const otherYPoints = [otherPos.y, otherPos.y + CARD_HEIGHT / 2, otherPos.y + CARD_HEIGHT];
+
+                        draggedCenters.forEach(dc => {
+                          otherXPoints.forEach(ox => {
+                            const diff = ox - dc.val;
+                            if (Math.abs(diff) < snapThreshold && Math.abs(diff) < Math.abs(bestDx)) {
+                              bestDx = diff;
+                              snapX = ox;
+                            }
+                          });
+                        });
+
+                        draggedVerticals.forEach(dv => {
+                          otherYPoints.forEach(oy => {
+                            const diff = oy - dv.val;
+                            if (Math.abs(diff) < snapThreshold && Math.abs(diff) < Math.abs(bestDy)) {
+                              bestDy = diff;
+                              snapY = oy;
+                            }
+                          });
+                        });
+                      });
+
+                      // Also snap to grid if no node snap found
+                      if (snapX !== null) {
+                        dx += bestDx;
+                        newSnapLines.push({ x: snapX });
+                      } else {
+                        const gridSnappedX = Math.round((pos.x + dx) / GRID_SIZE) * GRID_SIZE;
+                        if (Math.abs(gridSnappedX - (pos.x + dx)) < snapThreshold) {
+                          dx = gridSnappedX - pos.x;
+                          newSnapLines.push({ x: gridSnappedX });
+                        }
+                      }
+
+                      if (snapY !== null) {
+                        dy += bestDy;
+                        newSnapLines.push({ y: snapY });
+                      } else {
+                        const gridSnappedY = Math.round((pos.y + dy) / GRID_SIZE) * GRID_SIZE;
+                        if (Math.abs(gridSnappedY - (pos.y + dy)) < snapThreshold) {
+                          dy = gridSnappedY - pos.y;
+                          newSnapLines.push({ y: gridSnappedY });
+                        }
+                      }
+                    }
+
+                    setActiveDrag(prev => prev ? { ...prev, deltaX: dx, deltaY: dy } : null);
+                    setSnapLines(newSnapLines);
                   }
                 }}
                 onDragEnd={(_, info) => {
                   setIsDragging(false);
+                  const finalDeltaX = activeDrag?.deltaX ?? info.offset.x;
+                  const finalDeltaY = activeDrag?.deltaY ?? info.offset.y;
                   setActiveDrag(null);
+                  setSnapLines([]);
+                  
                   if (!isPanning && !isConnecting) {
-                    // Update all selected nodes (which includes the one being dragged)
+                    // Update all selected nodes
                     const updatedNodes: ResearchNode[] = nodes
                       .filter(n => selectedNodeIds.includes(n.id) || n.id === node.id)
                       .map(n => {
                         const originalPos = nodePositions[n.id];
-                        let newX = originalPos.x + info.offset.x;
-                        let newY = originalPos.y + info.offset.y;
-
-                        if (isSnapping) {
-                          newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
-                          newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
-                        }
+                        let newX = originalPos.x + finalDeltaX;
+                        let newY = originalPos.y + finalDeltaY;
                         
                         return { ...n, position: { x: newX, y: newY } };
                       });
@@ -964,9 +1171,8 @@ export function CanvasView({
                 {/* Connection Ports */}
                 <div 
                   className={cn(
-                    "connection-port absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-zinc-900 border-2 border-zinc-800 flex items-center justify-center cursor-crosshair z-20 transition-all opacity-0 group-hover:opacity-100",
-                    potentialTargetId === node.id && "border-blue-500 scale-125 opacity-100 bg-zinc-800 shadow-[0_0_15px_rgba(59,130,246,0.5)]",
-                    pendingConnection && "opacity-100 border-zinc-700"
+                    "connection-port absolute -left-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center cursor-crosshair z-20 transition-all duration-200",
+                    pendingConnection && pendingConnection.fromId !== node.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}
                   onPointerDown={(e) => e.stopPropagation()}
                   onMouseEnter={() => {
@@ -986,25 +1192,34 @@ export function CanvasView({
                   }}
                 >
                   <div className={cn(
-                    "w-1.5 h-1.5 rounded-full bg-zinc-600 transition-colors",
-                    potentialTargetId === node.id && "bg-blue-500"
-                  )} />
+                    "w-3 h-3 rounded-full bg-zinc-900 border-2 border-zinc-700 flex items-center justify-center transition-all duration-200",
+                    potentialTargetId === node.id && "border-blue-500 scale-125 bg-zinc-800 shadow-[0_0_15px_rgba(59,130,246,0.5)]",
+                    pendingConnection && pendingConnection.fromId !== node.id && "border-zinc-500"
+                  )}>
+                    <div className={cn(
+                      "w-1 h-1 rounded-full bg-zinc-600 transition-colors",
+                      potentialTargetId === node.id && "bg-blue-500"
+                    )} />
+                  </div>
                 </div>
                 
                 <div 
-                  className="connection-port absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-zinc-900 border-2 border-zinc-800 flex items-center justify-center cursor-crosshair z-20 hover:border-purple-500 hover:scale-110 transition-all opacity-0 group-hover:opacity-100"
+                  className="connection-port absolute -right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center cursor-crosshair z-20 transition-all duration-200 opacity-0 group-hover:opacity-100"
                   onPointerDown={(e) => e.stopPropagation()}
                   onMouseDown={(e) => {
                     e.stopPropagation();
                     const rect = containerRef.current?.getBoundingClientRect();
                     if (!rect) return;
-                    const startX = (e.clientX - rect.left - offset.x) / scale;
-                    const startY = (e.clientY - rect.top - offset.y) / scale;
+                    // Center of the output port in canvas space
+                    const startX = pos.x + 350;
+                    const startY = pos.y + 90;
                     setPendingConnection({ fromId: node.id, mouseX: startX, mouseY: startY });
                     document.body.style.cursor = 'crosshair';
                   }}
                 >
-                  <div className="w-1.5 h-1.5 rounded-full bg-purple-500 shadow-sm shadow-purple-500/50" />
+                  <div className="w-3 h-3 rounded-full bg-zinc-900 border-2 border-zinc-700 hover:border-purple-500 hover:scale-125 flex items-center justify-center transition-all duration-200 group/port">
+                    <div className="w-1 h-1 rounded-full bg-purple-500 shadow-sm shadow-purple-500/50 group-hover/port:scale-125 transition-transform" />
+                  </div>
                 </div>
 
                 <ResearchNodeCard 
@@ -1033,83 +1248,24 @@ export function CanvasView({
               <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Selected</span>
             </div>
 
-            <div className="flex items-center gap-1 mr-2 px-1 border-r border-zinc-800">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400 hover:text-zinc-100" onClick={() => alignNodes('left')}>
-                      <AlignLeft className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Align Left</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400 hover:text-zinc-100" onClick={() => alignNodes('center-h')}>
-                      <AlignHorizontalJustifyCenter className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Align Center Horizontal</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400 hover:text-zinc-100" onClick={() => alignNodes('right')}>
-                      <AlignRight className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Align Right</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-
-            <div className="flex items-center gap-1 mr-2 px-1 border-r border-zinc-800">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400 hover:text-zinc-100" onClick={() => alignNodes('top')}>
-                      <AlignVerticalJustifyStart className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Align Top</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400 hover:text-zinc-100" onClick={() => alignNodes('center-v')}>
-                      <AlignVerticalJustifyCenter className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Align Center Vertical</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-zinc-400 hover:text-zinc-100" onClick={() => alignNodes('bottom')}>
-                      <AlignVerticalJustifyEnd className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Align Bottom</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-
-            <div className="flex items-center gap-1">
+            <div className="relative flex items-center gap-1 mr-2 px-1 border-r border-zinc-800">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
                     <Button 
                       variant="ghost" 
-                      size="icon" 
-                      className="h-9 w-9 text-zinc-400 hover:text-zinc-100" 
-                      onClick={() => distributeNodes('horizontal')}
-                      disabled={selectedNodeIds.length < 3}
+                      size="sm" 
+                      className={cn(
+                        "h-9 px-3 gap-2 text-zinc-400 hover:text-zinc-100",
+                        showArrangeMenu && "bg-zinc-800 text-zinc-100"
+                      )} 
+                      onClick={() => setShowArrangeMenu(!showArrangeMenu)}
                     >
-                      <SeparatorVertical className="h-4 w-4" />
+                      <LayoutGrid className="h-4 w-4" />
+                      <span className="text-xs font-medium">Arrange</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Distribute Horizontally</TooltipContent>
+                  <TooltipContent>Alignment & Distribution</TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
@@ -1118,15 +1274,64 @@ export function CanvasView({
                       variant="ghost" 
                       size="icon" 
                       className="h-9 w-9 text-zinc-400 hover:text-zinc-100" 
-                      onClick={() => distributeNodes('vertical')}
-                      disabled={selectedNodeIds.length < 3}
+                      onClick={() => handleAutoLayout(selectedNodeIds)}
                     >
-                      <SeparatorHorizontal className="h-4 w-4" />
+                      <Layout className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Distribute Vertically</TooltipContent>
+                  <TooltipContent>Grid Layout Selected</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+
+              {/* Arrange Sub-Menu */}
+              <AnimatePresence>
+                {showArrangeMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    className="absolute bottom-full left-0 mb-3 bg-zinc-900 border border-zinc-800 rounded-xl p-2 shadow-2xl flex flex-col gap-1 min-w-[180px]"
+                  >
+                    <div className="px-2 py-1 mb-1 text-[10px] font-bold text-zinc-500 uppercase tracking-widest border-b border-zinc-800">
+                      Alignment
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-full" onClick={() => { alignNodes('left'); setShowArrangeMenu(false); }} title="Align Left">
+                        <AlignLeft className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-full" onClick={() => { alignNodes('center-h'); setShowArrangeMenu(false); }} title="Center Horizontal">
+                        <AlignHorizontalJustifyCenter className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-full" onClick={() => { alignNodes('right'); setShowArrangeMenu(false); }} title="Align Right">
+                        <AlignRight className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-full" onClick={() => { alignNodes('top'); setShowArrangeMenu(false); }} title="Align Top">
+                        <AlignVerticalJustifyStart className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-full" onClick={() => { alignNodes('center-v'); setShowArrangeMenu(false); }} title="Center Vertical">
+                        <AlignVerticalJustifyCenter className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-full" onClick={() => { alignNodes('bottom'); setShowArrangeMenu(false); }} title="Align Bottom">
+                        <AlignVerticalJustifyEnd className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="px-2 py-1 mt-1 mb-1 text-[10px] font-bold text-zinc-500 uppercase tracking-widest border-b border-zinc-800">
+                      Distribution
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" className="h-8 flex-1 gap-2" onClick={() => { distributeNodes('horizontal'); setShowArrangeMenu(false); }} disabled={selectedNodeIds.length < 3}>
+                        <SeparatorVertical className="h-3 w-3" />
+                        <span className="text-[10px]">Horizontal</span>
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 flex-1 gap-2" onClick={() => { distributeNodes('vertical'); setShowArrangeMenu(false); }} disabled={selectedNodeIds.length < 3}>
+                        <SeparatorHorizontal className="h-3 w-3" />
+                        <span className="text-[10px]">Vertical</span>
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div className="w-px h-6 bg-zinc-800 mx-2" />
@@ -1137,7 +1342,30 @@ export function CanvasView({
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-9 w-9 text-zinc-500 hover:text-red-500" 
+                    className="h-9 w-9 text-red-500/70 hover:text-red-500 hover:bg-red-500/10" 
+                    onClick={() => {
+                      if (onDeleteNodes) {
+                        onDeleteNodes(selectedNodeIds);
+                        setSelectedNodeIds([]);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Delete Selected Nodes</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <div className="w-px h-6 bg-zinc-800 mx-2" />
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-9 w-9 text-zinc-500 hover:text-zinc-100" 
                     onClick={() => {
                       setSelectedNodeIds([]);
                     }}

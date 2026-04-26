@@ -270,6 +270,20 @@ export default function App() {
     toast.success("Node deleted");
   };
 
+  const handleDeleteNodes = async (nodeIds: string[]) => {
+    if (!activeProject || nodeIds.length === 0) return;
+    const updatedProject = {
+      ...activeProject,
+      nodes: activeProject.nodes.filter(n => !nodeIds.includes(n.id)),
+      // Also clean up connections associated with these nodes
+      connections: (activeProject.connections || []).filter(c => 
+        !nodeIds.includes(c.fromId) && !nodeIds.includes(c.toId)
+      )
+    };
+    await saveProject(updatedProject);
+    toast.success(`${nodeIds.length} nodes deleted`);
+  };
+
   const handleEditNode = async (nodeId: string, content: string) => {
     if (!activeProject) return;
     const updatedProject = {
@@ -397,6 +411,23 @@ export default function App() {
     a.click();
     URL.revokeObjectURL(url);
     toast.success("Research exported to Markdown");
+  };
+
+  const handleCanvasAddNode = async (x: number, y: number) => {
+    if (!activeProject || !user) return;
+    const newNode: ResearchNode = {
+      id: Math.random().toString(36).substring(7),
+      type: 'thought',
+      content: "New idea...",
+      timestamp: Date.now(),
+      priority: 'low',
+      position: { x, y }
+    };
+    await saveProject({
+      ...activeProject,
+      nodes: [...(activeProject.nodes || []), newNode]
+    });
+    toast.success("New node added");
   };
 
   if (!isAuthReady) {
@@ -597,12 +628,16 @@ export default function App() {
                 connections={activeProject?.connections || []}
                 onUpdatePriority={handleUpdatePriority}
                 onDelete={handleDeleteNode}
+                onDeleteNodes={handleDeleteNodes}
                 onEdit={handleEditNode}
                 onUpdatePosition={handleUpdatePosition}
                 onUpdateNodes={handleUpdateNodes}
                 onAddConnection={handleAddConnection}
                 onDeleteConnection={handleDeleteConnection}
                 onUpdateConnection={handleUpdateConnection}
+                onBrainstorm={handleSend}
+                onSummarize={() => activeProject && handleSummarize(activeProject)}
+                onAddNode={handleCanvasAddNode}
               />
             )}
 
