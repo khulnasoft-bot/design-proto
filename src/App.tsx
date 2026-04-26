@@ -15,6 +15,7 @@ import { TemplateSelector } from "./components/TemplateSelector";
 import { WorkshopPanel } from "./components/WorkshopPanel";
 import { CookbookPanel } from "./components/CookbookPanel";
 import { SkillsPanel } from "./components/SkillsPanel";
+import { AIElementsLab } from "./components/ai-elements/AIElementsLab";
 import { Project, ResearchNode, Priority, BusinessMemory, SitePage, Connection, Task, ProjectTemplate } from "./types";
 import { generateResearchResponse } from "./lib/gemini";
 import { Toaster, toast } from "sonner";
@@ -35,7 +36,8 @@ import {
   Globe,
   Beaker,
   BookOpen,
-  Zap
+  Zap,
+  Box
 } from "lucide-react";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "./components/ui/tooltip";
 import { Button } from "./components/ui/button";
@@ -69,7 +71,7 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'canvas' | 'memory' | 'site' | 'tasks' | 'workshop' | 'cookbook' | 'skills'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'canvas' | 'memory' | 'site' | 'tasks' | 'workshop' | 'cookbook' | 'skills' | 'ai-elements'>('list');
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -837,6 +839,14 @@ export default function App() {
                   >
                     <Zap className="mr-2 h-3.5 w-3.5" /> Skills
                   </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setViewMode('ai-elements')}
+                    className={cn("h-7 px-3 text-xs rounded-md", viewMode === 'ai-elements' ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300")}
+                  >
+                    <Box className="mr-2 h-3.5 w-3.5" /> Elements
+                  </Button>
                 </div>
 
                 <div className="h-4 w-px bg-zinc-800" />
@@ -980,6 +990,9 @@ export default function App() {
               )}
               {viewMode === 'skills' && (
                 <SkillsPanel />
+              )}
+              {viewMode === 'ai-elements' && (
+                <AIElementsLab />
               )}
             </div>
 
