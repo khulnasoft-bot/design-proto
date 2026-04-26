@@ -48,6 +48,15 @@ export interface Connection {
   color?: string;
 }
 
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  completed: boolean;
+  priority: Priority;
+  createdAt: number;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -57,6 +66,18 @@ export interface Project {
   connections?: Connection[];
   businessMemory?: BusinessMemory;
   sitePages?: SitePage[];
+  tasks?: Task[];
+}
+
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  nodes: Partial<ResearchNode>[];
+  connections?: Partial<Connection>[];
+  tasks?: Partial<Task>[];
+  businessMemory?: Partial<BusinessMemory>;
 }
 
 export interface WorkspaceState {

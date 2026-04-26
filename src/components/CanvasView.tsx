@@ -1,8 +1,8 @@
 import React, { useRef, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ResearchNode, Priority, Connection } from "@/src/types";
+import { ResearchNode, Priority, Connection } from "../types";
 import { ResearchNodeCard } from "./ResearchNodeCard";
-import { cn } from "@/lib/utils";
+import { cn } from "../lib/utils";
 import { RadialMenu, RadialMenuItem } from "./RadialMenu";
 import { 
   Sparkles, 
@@ -17,6 +17,8 @@ import {
   Grab,
   Link2,
   X,
+  Undo2,
+  Redo2,
   LayoutGrid,
   AlignLeft,
   AlignRight,
@@ -36,18 +38,21 @@ import {
   ZoomOut,
   Maximize2
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "./ui/button";
 import { 
   Tooltip, 
   TooltipContent, 
   TooltipProvider, 
   TooltipTrigger 
-} from "@/components/ui/tooltip";
+} from "./ui/tooltip";
 import { toast } from "sonner";
+import { NodeEditPanel } from "./NodeEditPanel";
 
 interface CanvasViewProps {
   nodes: ResearchNode[];
   connections: Connection[];
+  selectedNodeIds: string[];
+  onSelectNodeIds: (ids: string[]) => void;
   onUpdatePriority: (nodeId: string, priority: Priority) => void;
   onDelete: (nodeId: string) => void;
   onDeleteNodes?: (nodeIds: string[]) => void;
@@ -60,11 +65,17 @@ interface CanvasViewProps {
   onBrainstorm?: (query: string) => void;
   onSummarize?: () => void;
   onAddNode?: (x: number, y: number) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 export function CanvasView({ 
   nodes, 
   connections,
+  selectedNodeIds,
+  onSelectNodeIds,
   onUpdatePriority, 
   onDelete, 
   onDeleteNodes,
@@ -76,7 +87,11 @@ export function CanvasView({
   onUpdateConnection,
   onBrainstorm,
   onSummarize,
-  onAddNode
+  onAddNode,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo
 }: CanvasViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -85,7 +100,6 @@ export function CanvasView({
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSnapping, setIsSnapping] = useState(true);
   const [activeDrag, setActiveDrag] = useState<{ id: string; currentX: number; currentY: number; deltaX: number; deltaY: number } | null>(null);
-  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [connectionStartNode, setConnectionStartNode] = useState<string | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [marquee, setMarquee] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
@@ -135,20 +149,20 @@ export function CanvasView({
     }
 
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
-      setSelectedNodeIds(prev => 
-        prev.includes(nodeId) 
-          ? prev.filter(id => id !== nodeId) 
-          : [...prev, nodeId]
+      onSelectNodeIds(
+        selectedNodeIds.includes(nodeId) 
+          ? selectedNodeIds.filter(id => id !== nodeId) 
+          : [...selectedNodeIds, nodeId]
       );
     } else {
-      setSelectedNodeIds([nodeId]);
+      onSelectNodeIds([nodeId]);
     }
   };
 
   const handleBgClick = (e: React.MouseEvent) => {
     if (e.shiftKey || e.metaKey || e.ctrlKey) return;
     
-    setSelectedNodeIds([]);
+    onSelectNodeIds([]);
     setConnectionStartNode(null);
     setSelectedConnectionId(null);
     setEditingLabelId(null);
@@ -328,9 +342,9 @@ export function CanvasView({
       // Additive selection: combine existing selected nodes with those in the marquee
       // (Using a Set to ensure unique IDs)
       const combined = new Set([...selectedNodeIds, ...newlySelectedInMarquee]);
-      setSelectedNodeIds(Array.from(combined));
+      onSelectNodeIds(Array.from(combined));
     } else {
-      setSelectedNodeIds(newlySelectedInMarquee);
+      onSelectNodeIds(newlySelectedInMarquee);
     }
   };
 
@@ -425,22 +439,36 @@ export function CanvasView({
       action: () => {
           if (selectedNodeIds.length > 0 && onDeleteNodes) {
               onDeleteNodes(selectedNodeIds);
-              setSelectedNodeIds([]);
+              onSelectNodeIds([]);
           } else if (selectedNodeIds.length === 0) {
               toast.error("No nodes selected");
           }
       }
     },
     {
-      id: 'site-gen',
-      icon: Globe,
-      label: 'Digital Agent',
-      color: '#ec4899',
-      action: () => {
-          toast.success("AI Agent deployed to current workspace");
-      }
+        id: 'site-gen',
+        icon: Globe,
+        label: 'Digital Agent',
+        color: '#ec4899',
+        action: () => {
+            toast.success("AI Agent deployed to current workspace");
+        }
+    },
+    {
+      id: 'undo',
+      icon: Undo2,
+      label: 'Undo',
+      color: '#a1a1aa',
+      action: () => onUndo?.()
     }
   ];
+
+  const selectedNode = useMemo(() => {
+    if (selectedNodeIds.length === 1) {
+      return nodes.find(n => n.id === selectedNodeIds[0]);
+    }
+    return null;
+  }, [selectedNodeIds, nodes]);
 
   return (
     <div 
@@ -516,6 +544,37 @@ export function CanvasView({
       {/* Nodes Layer */}
       <div className="absolute bottom-24 right-8 flex flex-col gap-2 z-20">
         <div className="bg-zinc-900/80 backdrop-blur-md border border-zinc-800 rounded-xl p-1 flex flex-col gap-1 shadow-2xl">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={onUndo} 
+                  disabled={!canUndo}
+                  className="h-8 w-8 text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                >
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Undo Action</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={onRedo} 
+                  disabled={!canRedo}
+                  className="h-8 w-8 text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                >
+                  <Redo2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Redo Action</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <div className="h-px bg-zinc-800 mx-1" />
           <Button variant="ghost" size="icon" onClick={() => handleZoom(0.1)} className="h-8 w-8 text-zinc-400 hover:text-zinc-100">
             <ZoomIn className="h-4 w-4" />
           </Button>
@@ -782,8 +841,8 @@ export function CanvasView({
             const isHovered = hoveredConnectionId === conn.id;
 
             const getStrokeDashArray = () => {
-              if (conn.style === 'dashed') return "8 4";
-              if (conn.style === 'dotted') return "2 4";
+              if (conn.style === 'dashed') return "10 5";
+              if (conn.style === 'dotted') return "3 3";
               return "none";
             };
 
@@ -857,7 +916,13 @@ export function CanvasView({
                           ) : (
                             <div className="flex flex-col items-center gap-2">
                               {conn.label && (
-                                <div className="bg-zinc-900/90 backdrop-blur-sm border border-zinc-800 text-zinc-300 text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap shadow-lg">
+                                <div 
+                                  className="bg-zinc-900/90 backdrop-blur-sm border border-zinc-800 text-zinc-300 text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap shadow-lg cursor-pointer hover:bg-zinc-800 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingLabelId(conn.id);
+                                  }}
+                                >
                                   {conn.label}
                                 </div>
                               )}
@@ -887,9 +952,9 @@ export function CanvasView({
                                   
                                   <TooltipProvider>
                                     {[
-                                      { style: 'solid', icon: <Minus className="h-3 w-3" /> },
-                                      { style: 'dashed', icon: <MoreHorizontal className="h-3 w-3" /> },
-                                      { style: 'dotted', icon: <Baseline className="h-3 w-3" /> }
+                                      { style: 'solid', icon: <Minus className="h-3 w-3" />, label: 'Solid' },
+                                      { style: 'dashed', icon: <SeparatorHorizontal className="h-3 w-3" />, label: 'Dashed' },
+                                      { style: 'dotted', icon: <MoreHorizontal className="h-3 w-3" />, label: 'Dotted' }
                                     ].map((item) => (
                                       <Tooltip key={item.style}>
                                         <TooltipTrigger>
@@ -908,7 +973,7 @@ export function CanvasView({
                                             {item.icon}
                                           </Button>
                                         </TooltipTrigger>
-                                        <TooltipContent side="top" className="capitalize">{item.style} Style</TooltipContent>
+                                        <TooltipContent side="top">{item.label} Style</TooltipContent>
                                       </Tooltip>
                                     ))}
                                   </TooltipProvider>
@@ -1047,7 +1112,7 @@ export function CanvasView({
                     setSnapLines([]);
                     // If the node being dragged isn't selected, select only it
                     if (!selectedNodeIds.includes(node.id)) {
-                      setSelectedNodeIds([node.id]);
+                      onSelectNodeIds([node.id]);
                     }
                   }
                 }}
@@ -1346,7 +1411,7 @@ export function CanvasView({
                     onClick={() => {
                       if (onDeleteNodes) {
                         onDeleteNodes(selectedNodeIds);
-                        setSelectedNodeIds([]);
+                        onSelectNodeIds([]);
                       }
                     }}
                   >
@@ -1367,7 +1432,7 @@ export function CanvasView({
                     size="icon" 
                     className="h-9 w-9 text-zinc-500 hover:text-zinc-100" 
                     onClick={() => {
-                      setSelectedNodeIds([]);
+                      onSelectNodeIds([]);
                     }}
                   >
                     <X className="h-4 w-4" />
@@ -1377,6 +1442,20 @@ export function CanvasView({
               </Tooltip>
             </TooltipProvider>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedNode && (
+          <NodeEditPanel 
+            node={selectedNode}
+            onUpdate={(updatedNode) => onUpdateNodes([updatedNode])}
+            onDelete={(id) => {
+              onDelete(id);
+              onSelectNodeIds([]);
+            }}
+            onClose={() => onSelectNodeIds([])}
+          />
         )}
       </AnimatePresence>
     </div>

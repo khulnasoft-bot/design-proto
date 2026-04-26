@@ -1,12 +1,13 @@
-import { useState } from "react";
-import { motion } from "motion/react";
-import { ResearchNode, Priority } from "@/src/types";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ExternalLink, Search, Lightbulb, FileText, Brain, Flag, Copy, Trash2, Edit2, Check, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { ResearchNode, Priority } from "../types";
+import { Card, CardContent, CardHeader } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { ExternalLink, Search, Lightbulb, FileText, Brain, Flag, Copy, Trash2, Edit2, Check, X, ChartLine } from "lucide-react";
+import { cn } from "../lib/utils";
 import { toast } from "sonner";
+import { VegaVisualizer } from "./VegaVisualizer";
 
 const icons = {
   query: Search,
@@ -23,11 +24,15 @@ const priorityColors = {
 
 export function ResearchNodeCard({ 
   node, 
+  isSelected,
+  onSelect,
   onUpdatePriority,
   onDelete,
   onEdit
 }: { 
   node: ResearchNode;
+  isSelected?: boolean;
+  onSelect?: () => void;
   onUpdatePriority?: (priority: Priority) => void;
   onDelete?: () => void;
   onEdit?: (content: string) => void;
@@ -48,8 +53,47 @@ export function ResearchNodeCard({
     setIsEditing(false);
   };
 
+  const parsedContent = useMemo(() => {
+    const vegaRegex = /```vega-lite\n([\s\S]*?)\n```/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = vegaRegex.exec(node.content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ type: 'text', content: node.content.slice(lastIndex, match.index) });
+      }
+      parts.push({ type: 'vega', spec: match[1] });
+      lastIndex = vegaRegex.lastIndex;
+    }
+
+    if (lastIndex < node.content.length) {
+      parts.push({ type: 'text', content: node.content.slice(lastIndex) });
+    }
+
+    return parts.length > 0 ? parts : [{ type: 'text', content: node.content }];
+  }, [node.content]);
+
   return (
-    <Card className="border-zinc-800 bg-zinc-900/50 backdrop-blur-sm group">
+    <Card 
+      onClick={(e) => {
+        // Only trigger onSelect if not clicking a button or link
+        if (!(e.target as HTMLElement).closest('button') && !(e.target as HTMLElement).closest('a') && !(e.target as HTMLElement).closest('textarea')) {
+          onSelect?.();
+        }
+      }}
+      className={cn(
+        "border-zinc-800 bg-zinc-900/50 backdrop-blur-sm group transition-all cursor-pointer relative overflow-hidden",
+        isSelected && "ring-2 ring-blue-500 border-transparent bg-zinc-900 shadow-lg shadow-blue-500/10"
+      )}
+    >
+      {isSelected && (
+        <div className="absolute top-0 right-0 p-1">
+          <div className="bg-blue-600 rounded-bl-lg p-1 shadow-lg">
+            <Check className="w-3 h-3 text-white" />
+          </div>
+        </div>
+      )}
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <div className="flex items-center gap-2">
           <div className="rounded-full bg-zinc-800 p-2">
@@ -146,8 +190,21 @@ export function ResearchNodeCard({
             </div>
           </div>
         ) : (
-          <div className="prose prose-invert max-w-none text-zinc-300 leading-relaxed whitespace-pre-wrap">
-            {node.content}
+          <div className="space-y-4">
+            {parsedContent.map((part, idx) => (
+              part.type === 'vega' ? (
+                <div key={idx} className="my-2">
+                  <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                    <ChartLine className="w-3 h-3" /> Data Visualization
+                  </div>
+                  <VegaVisualizer spec={part.spec} />
+                </div>
+              ) : (
+                <div key={idx} className="prose prose-invert max-w-none text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                  {part.content}
+                </div>
+              )
+            ))}
           </div>
         )}
         {node.sources && node.sources.length > 0 && (

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { BusinessMemory, Project } from "../types";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { Label } from "./ui/label";
+import { Card } from "./ui/card";
 import { Brain, Save, Sparkles, Building2, Target, Heart } from "lucide-react";
 import { toast } from "sonner";
 

@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
-import { Project } from "@/src/types";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Project } from "../types";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { ScrollArea } from "./ui/scroll-area";
 import { Plus, Folder, Clock, Settings, Search, Sparkles, X } from "lucide-react";
 
 export function Sidebar({ 
@@ -15,7 +15,9 @@ export function Sidebar({
   onDeleteProject,
   onExport,
   chatSearchQuery,
-  onChatSearchChange
+  onChatSearchChange,
+  selectedNodeCount,
+  onMoveNodes
 }: { 
   projects: Project[]; 
   activeProjectId: string | null;
@@ -27,6 +29,8 @@ export function Sidebar({
   onExport: () => void;
   chatSearchQuery: string;
   onChatSearchChange: (query: string) => void;
+  selectedNodeCount: number;
+  onMoveNodes: (targetProjectId: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
@@ -61,6 +65,16 @@ export function Sidebar({
           <h1 className="font-bold text-zinc-100 tracking-tight text-lg">RADIAL</h1>
         </div>
         
+        {selectedNodeCount > 0 && (
+          <div className="bg-blue-600/10 border border-blue-500/20 rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Selection</span>
+              <span className="text-[10px] bg-blue-500 text-white px-1.5 py-0.5 rounded-md font-bold">{selectedNodeCount}</span>
+            </div>
+            <p className="text-[10px] text-zinc-500 leading-tight">Select a project below to move these nodes there.</p>
+          </div>
+        )}
+
         <div className="space-y-3">
           <Button 
             onClick={onNewProject}
@@ -154,6 +168,18 @@ export function Sidebar({
                     <span className="truncate text-left font-medium flex-1">{project.name}</span>
                     
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {selectedNodeCount > 0 && activeProjectId !== project.id && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMoveNodes(project.id);
+                          }}
+                          className="px-2 py-0.5 rounded-md bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 hover:text-blue-300 transition-all font-bold text-[9px] uppercase tracking-widest border border-blue-500/20"
+                          title="Move selected nodes here"
+                        >
+                          Move
+                        </button>
+                      )}
                       {project.nodes.length > 0 && (
                         <button
                           onClick={(e) => {

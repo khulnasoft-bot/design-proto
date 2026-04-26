@@ -19,7 +19,29 @@ Key Offerings: ${businessMemory.keyOfferings.join(', ')}
 Brand Voice: ${businessMemory.brandVoice}
 ` : ""}
 Provide deep, synthesized insights. If requested to generate site content, use the business memory to ensure consistency.
-Focus on accuracy, depth, and strategic value.`;
+Focus on accuracy, depth, and strategic value.
+
+VISUALIZATIONS:
+If your research involves data points, trends, or comparisons, you MUST provide a visualization using Vega-Lite. 
+Format your visualization as a JSON block inside a code block tagged with 'vega-lite'.
+Example:
+\`\`\`vega-lite
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "description": "A simple bar chart with embedded data.",
+  "data": {
+    "values": [
+      {"a": "A", "b": 28}, {"a": "B", "b": 55}, {"a": "C", "b": 43}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "a", "type": "nominal", "axis": {"labelAngle": 0}},
+    "y": {"field": "b", "type": "quantitative"}
+  }
+}
+\`\`\`
+Ensure the data reflects your research findings.`;
 
   try {
     const config: any = {
@@ -28,9 +50,10 @@ Focus on accuracy, depth, and strategic value.`;
 
     if (useThinking && model === "gemini-3.1-pro-preview") {
       config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
-    } else {
-      config.tools = [{ googleSearch: {} }];
     }
+    
+    // Always enable Google Search for research grounding
+    config.tools = [{ googleSearch: {} }];
 
     const response = await ai.models.generateContent({
       model,

@@ -1,5 +1,9 @@
 {
-  "name": "Remix: Radial Research",
-  "description": "A production-grade AI research workspace built on the Radial Architecture framework.",
-  "requestFramePermissions": []
+  "name": "Cortex: Research Intelligence",
+  "description": "Unified research platform with real-time AI multimodal intelligence, visual mapping, and cross-device sync.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
 }

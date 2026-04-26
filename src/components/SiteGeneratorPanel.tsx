@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Project, SitePage } from "../types";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Badge } from "./ui/badge";
 import { 
   FileText, 
   Sparkles, 
